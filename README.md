@@ -40,7 +40,7 @@ CursorFlow draws two things on top of your real cursor: a fixed **front cursor**
 
 ## Configuration
 
-<img width="442" height="859" alt="CursorFlow settings window" src="https://github.com/user-attachments/assets/d408e9a8-156d-4e9d-97b3-ea8e07bbb28a" />
+<img width="442" height="893" alt="CursorFlowSettings_kHYhGrIIlH" src="https://github.com/user-attachments/assets/315b0d7a-2b8f-467a-8fe6-1b449ad576c7" />
 
 | Option | Description | Default |
 | :--- | :--- | :--- |
