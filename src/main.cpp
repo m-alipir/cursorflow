@@ -34,14 +34,19 @@ cursor_scheme::Style ParseLayer1Style(const std::string& s) {
     return cursor_scheme::Style::kThickCross;
 }
 
-void AddTrayIcon(HWND hwnd, NOTIFYICONDATAW& nid) {
+void AddTrayIcon(HINSTANCE hInstance, HWND hwnd, NOTIFYICONDATAW& nid) {
     nid = {};
     nid.cbSize = sizeof(nid);
     nid.hWnd = hwnd;
     nid.uID = 1;
     nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     nid.uCallbackMessage = overlay_window::kTrayIconMessage;
-    nid.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
+    // MAINICON is the app's own icon (resources/app_icon.ico via app.rc),
+    // not the generic default -- LoadIconW(nullptr, IDI_APPLICATION) is
+    // just a stand-in.
+    nid.hIcon = static_cast<HICON>(LoadImageW(
+        hInstance, L"MAINICON", IMAGE_ICON, GetSystemMetrics(SM_CXSMICON),
+        GetSystemMetrics(SM_CYSMICON), LR_DEFAULTCOLOR));
     wcscpy_s(nid.szTip, L"Smooth Cursor Overlay");
     Shell_NotifyIconW(NIM_ADD, &nid);
 }
@@ -105,7 +110,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     raw_input::Register(hwnd);
 
     NOTIFYICONDATAW trayIcon;
-    AddTrayIcon(hwnd, trayIcon);
+    AddTrayIcon(hInstance, hwnd, trayIcon);
 
     physics::SpringState springState;
     auto lastFrameTime = std::chrono::steady_clock::now();

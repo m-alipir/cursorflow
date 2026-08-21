@@ -66,7 +66,16 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             }
             return 0;
         case kTrayIconMessage:
-            if (LOWORD(lParam) == WM_RBUTTONUP || LOWORD(lParam) == WM_LBUTTONUP) {
+            // Left click is reserved for double-click (opens settings,
+            // the conventional tray-icon shortcut -- including from the
+            // Windows 11 "hidden icons" flyout). A single WM_LBUTTONUP no
+            // longer also opens the context menu: since a double-click's
+            // first click still fires its own WM_LBUTTONUP, having both
+            // wired raced TrackPopupMenu's blocking message pump against
+            // the second click. Right click keeps the context menu.
+            if (LOWORD(lParam) == WM_LBUTTONDBLCLK) {
+                LaunchSettingsWindow();
+            } else if (LOWORD(lParam) == WM_RBUTTONUP) {
                 ShowTrayMenu(hwnd, ctx);
             }
             return 0;

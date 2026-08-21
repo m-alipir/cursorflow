@@ -88,6 +88,8 @@ if(WIN32)
         comctl32
         user32
         gdi32
+        gdiplus
+        comdlg32
     )
 
     target_link_options(SmoothCursorOverlaySettings PRIVATE /MANIFEST:NO)
