@@ -76,6 +76,7 @@ int main() {
     std::string appliedLayer1Style = settings.layer1Style;
     bool appliedLayer1Invert = settings.layer1Invert;
     std::string appliedLayer1Path = settings.layer1CustomCursorPath;
+    int appliedLayer1ReloadToken = settings.layer1ReloadToken;
 
     renderer.Configure(settings.blurIntensity, settings.trailLength,
                         settings.ghostScale);
@@ -116,7 +117,8 @@ int main() {
 
             if (!suspended && (settings.layer1Style != appliedLayer1Style ||
                                 settings.layer1Invert != appliedLayer1Invert ||
-                                settings.layer1CustomCursorPath != appliedLayer1Path)) {
+                                settings.layer1CustomCursorPath != appliedLayer1Path ||
+                                settings.layer1ReloadToken != appliedLayer1ReloadToken)) {
                 cursor_scheme::SetStyle(display, root,
                                          ParseLayer1Style(settings.layer1Style),
                                          settings.layer1Invert,
@@ -124,6 +126,7 @@ int main() {
                 appliedLayer1Style = settings.layer1Style;
                 appliedLayer1Invert = settings.layer1Invert;
                 appliedLayer1Path = settings.layer1CustomCursorPath;
+                appliedLayer1ReloadToken = settings.layer1ReloadToken;
             }
         }
 

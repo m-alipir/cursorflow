@@ -26,6 +26,7 @@ struct Widgets {
     GtkWidget* invertCheck;
     GtkWidget* startupCheck;
     GtkWidget* customPathChooser;
+    GtkWidget* reloadButton;
     GtkWidget* excludeEntry;
 };
 
@@ -213,6 +214,15 @@ void OnStartupToggled(GtkToggleButton* btn, gpointer) {
     SetRunAtStartup(gtk_toggle_button_get_active(btn));
 }
 
+// Forces the overlay to fully rebuild Layer 1 from scratch (all cursor
+// roles re-applied) even though style/invert/path haven't changed --
+// recovery for when a custom cursor file occasionally fails to reapply
+// cleanly. See config.h's layer1ReloadToken.
+void OnReloadClicked(GtkButton*, gpointer userData) {
+    g_settings.layer1ReloadToken++;
+    SaveFromWidgets(static_cast<Widgets*>(userData));
+}
+
 gchar* FormatMultiplier(GtkScale*, gdouble value, gpointer) {
     return g_strdup_printf("%.2fx", value);
 }
@@ -246,7 +256,7 @@ int main(int argc, char** argv) {
 
     GtkWidget* window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(window), "CursorFlow - Settings");
-    gtk_window_set_default_size(GTK_WINDOW(window), 440, 700);
+    gtk_window_set_default_size(GTK_WINDOW(window), 440, 740);
     gtk_container_set_border_width(GTK_CONTAINER(window), 24);
     g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), nullptr);
 
@@ -324,6 +334,18 @@ int main(int argc, char** argv) {
                                   QueryRunAtStartup());
     gtk_box_pack_start(GTK_BOX(box), widgets->startupCheck, FALSE, FALSE, 8);
 
+    GtkWidget* customLabel = gtk_label_new("Custom Cursor File");
+    gtk_widget_set_halign(customLabel, GTK_ALIGN_START);
+    gtk_style_context_add_class(gtk_widget_get_style_context(customLabel), "section");
+    gtk_box_pack_start(GTK_BOX(box), customLabel, FALSE, FALSE, 4);
+
+    GtkWidget* customHelp = gtk_label_new(
+        "Xcursor-format file -- ideally 32x32px (up to 256x256)");
+    gtk_widget_set_halign(customHelp, GTK_ALIGN_START);
+    gtk_style_context_add_class(gtk_widget_get_style_context(customHelp), "hint");
+    gtk_box_pack_start(GTK_BOX(box), customHelp, FALSE, FALSE, 2);
+
+    GtkWidget* customRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
     widgets->customPathChooser = gtk_file_chooser_button_new(
         "Select a custom cursor file", GTK_FILE_CHOOSER_ACTION_OPEN);
     if (!g_settings.layer1CustomCursorPath.empty()) {
@@ -331,7 +353,15 @@ int main(int argc, char** argv) {
             GTK_FILE_CHOOSER(widgets->customPathChooser),
             g_settings.layer1CustomCursorPath.c_str());
     }
-    gtk_box_pack_start(GTK_BOX(box), widgets->customPathChooser, FALSE, FALSE, 4);
+    gtk_widget_set_hexpand(widgets->customPathChooser, TRUE);
+    gtk_box_pack_start(GTK_BOX(customRow), widgets->customPathChooser, TRUE, TRUE, 0);
+
+    // Recovery button: forces a full reapply of Layer 1 without needing
+    // to restart the overlay -- see OnReloadClicked's comment.
+    widgets->reloadButton = gtk_button_new_with_label("Reload");
+    gtk_box_pack_start(GTK_BOX(customRow), widgets->reloadButton, FALSE, FALSE, 0);
+
+    gtk_box_pack_start(GTK_BOX(box), customRow, FALSE, FALSE, 4);
 
     GtkWidget* excludeLabel = gtk_label_new("Excluded Processes");
     gtk_widget_set_halign(excludeLabel, GTK_ALIGN_START);
@@ -377,6 +407,8 @@ int main(int argc, char** argv) {
                       G_CALLBACK(OnStartupToggled), widgets);
     g_signal_connect(widgets->customPathChooser, "file-set",
                       G_CALLBACK(OnCustomPathChanged), widgets);
+    g_signal_connect(widgets->reloadButton, "clicked",
+                      G_CALLBACK(OnReloadClicked), widgets);
     g_signal_connect(widgets->excludeEntry, "changed",
                       G_CALLBACK(OnEntryChanged), widgets);
 

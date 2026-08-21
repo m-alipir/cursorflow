@@ -5,10 +5,36 @@
 #include <algorithm>
 #include <cwctype>
 #include <fstream>
+#include <locale>
 #include <sstream>
 
 namespace config {
 namespace {
+
+// std::stof/std::stoi parse through the process's global C locale, not a
+// fixed one -- if anything in this process has called setlocale() for a
+// locale that uses ',' as the decimal separator (Turkish among many
+// others), "1.75" silently parses as just "1", and a value the user set
+// looks like it "didn't save" after a restart. Parsing through an
+// istringstream explicitly imbued with the classic "C" locale sidesteps
+// that regardless of what the rest of the process has done to the global
+// locale. WriteDefaultConfig/Save() imbue their output streams the same
+// way so a saved file always uses '.' too.
+float ParseFloatClassic(const std::wstring& s, float fallback) {
+    std::wistringstream iss(s);
+    iss.imbue(std::locale::classic());
+    float v;
+    if (iss >> v) return v;
+    return fallback;
+}
+
+int ParseIntClassic(const std::wstring& s, int fallback) {
+    std::wistringstream iss(s);
+    iss.imbue(std::locale::classic());
+    int v;
+    if (iss >> v) return v;
+    return fallback;
+}
 
 std::wstring GetConfigPath() {
     wchar_t exePath[MAX_PATH];
@@ -37,12 +63,15 @@ constexpr wchar_t kDefaultConfigContents[] =
     L"layer1_invert=1\n"
     L"# layer1_custom_path: .cur/.ani/.ico file to use when layer1_style=custom\n"
     L"layer1_custom_path=\n"
+    L"# layer1_reload_token: bumped by the settings GUI's Reload button; not user-editable\n"
+    L"layer1_reload_token=0\n"
     L"# exclude_list: comma-separated extra process names to auto-suspend for\n"
     L"exclude_list=\n";
 
 void WriteDefaultConfig(const std::wstring& path) {
     std::wofstream out(path);
     if (out) {
+        out.imbue(std::locale::classic());
         out << kDefaultConfigContents;
     }
 }
@@ -130,36 +159,28 @@ Settings Load() {
         std::wstring value = Trim(trimmed.substr(eq + 1));
 
         if (key == L"blur_intensity") {
-            try {
-                settings.blurIntensity = std::max(0.0f, std::stof(value));
-            } catch (...) {
-            }
+            settings.blurIntensity =
+                std::max(0.0f, ParseFloatClassic(value, settings.blurIntensity));
         } else if (key == L"trail_length") {
-            try {
-                settings.trailLength = std::clamp(std::stoi(value), 0, 200);
-            } catch (...) {
-            }
+            settings.trailLength =
+                std::clamp(ParseIntClassic(value, settings.trailLength), 0, 200);
         } else if (key == L"ghost_scale") {
-            try {
-                settings.ghostScale = std::clamp(std::stof(value), 0.1f, 4.0f);
-            } catch (...) {
-            }
+            settings.ghostScale = std::clamp(
+                ParseFloatClassic(value, settings.ghostScale), 0.1f, 4.0f);
         } else if (key == L"rotation_intensity") {
-            try {
-                settings.rotationIntensity = std::clamp(std::stof(value), 0.0f, 3.0f);
-            } catch (...) {
-            }
+            settings.rotationIntensity = std::clamp(
+                ParseFloatClassic(value, settings.rotationIntensity), 0.0f, 3.0f);
         } else if (key == L"spring_speed") {
-            try {
-                settings.springSpeed = std::clamp(std::stof(value), 0.1f, 5.0f);
-            } catch (...) {
-            }
+            settings.springSpeed = std::clamp(
+                ParseFloatClassic(value, settings.springSpeed), 0.1f, 5.0f);
         } else if (key == L"layer1_style") {
             settings.layer1Style = WideToUtf8(value);
         } else if (key == L"layer1_invert") {
             settings.layer1Invert = (value == L"1" || value == L"true");
         } else if (key == L"layer1_custom_path") {
             settings.layer1CustomCursorPath = WideToUtf8(value);
+        } else if (key == L"layer1_reload_token") {
+            settings.layer1ReloadToken = ParseIntClassic(value, settings.layer1ReloadToken);
         } else if (key == L"exclude_list") {
             settings.extraExcludedProcesses = SplitCsv(value);
         }
@@ -174,6 +195,7 @@ void Save(const Settings& settings) {
     if (!out) {
         return;
     }
+    out.imbue(std::locale::classic());
 
     out << L"# CursorFlow config\n";
     out << L"blur_intensity=" << settings.blurIntensity << L"\n";
@@ -184,6 +206,7 @@ void Save(const Settings& settings) {
     out << L"layer1_style=" << Utf8ToWide(settings.layer1Style) << L"\n";
     out << L"layer1_invert=" << (settings.layer1Invert ? 1 : 0) << L"\n";
     out << L"layer1_custom_path=" << Utf8ToWide(settings.layer1CustomCursorPath) << L"\n";
+    out << L"layer1_reload_token=" << settings.layer1ReloadToken << L"\n";
     out << L"exclude_list=";
     for (size_t i = 0; i < settings.extraExcludedProcesses.size(); ++i) {
         if (i > 0) {

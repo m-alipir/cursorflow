@@ -103,7 +103,7 @@ struct Layout {
     RECT shapeLabel, shapeField;
     RECT invertBox, invertLabel;
     RECT startupBox, startupLabel;
-    RECT customLabel, customField, browseBtn;
+    RECT customLabel, customHelp, customField, browseBtn, reloadBtn;
     RECT excludeLabel, excludeHelp, excludeField;
     RECT footer;
     int totalH;
@@ -154,9 +154,13 @@ Layout ComputeLayout() {
     y += 20 + 16;
 
     L.customLabel = MakeRect(x, y, kContentW, 20);
-    y += 22;
-    L.customField = MakeRect(x, y, kContentW - 96, kFieldH);
-    L.browseBtn = MakeRect(x + kContentW - 88, y, 88, kFieldH);
+    y += 21;
+    L.customHelp = MakeRect(x, y, kContentW, 16);
+    y += 20;
+    constexpr int kCustomBtnW = 74;
+    L.customField = MakeRect(x, y, kContentW - (kCustomBtnW * 2 + 16), kFieldH);
+    L.reloadBtn = MakeRect(x + kContentW - (kCustomBtnW * 2 + 8), y, kCustomBtnW, kFieldH);
+    L.browseBtn = MakeRect(x + kContentW - kCustomBtnW, y, kCustomBtnW, kFieldH);
     y += kFieldH + 16;
 
     L.excludeLabel = MakeRect(x, y, kContentW, 20);
@@ -192,6 +196,7 @@ HFONT g_fontHelp = nullptr;
 int g_dragSlider = -1;
 int g_hoverReset = -1;
 bool g_hoverBrowse = false;
+bool g_hoverReload = false;
 bool g_dirty = false;
 bool g_mouseTracking = false;
 bool g_runAtStartup = false;
@@ -691,6 +696,14 @@ void PaintWindow(HWND hwnd, HDC target) {
                                    : kTrackEmpty;
         FillRound(g, ToRectF(g_layout.browseBtn), 8.0f, browseBg);
 
+        // Reload always stays enabled, regardless of style -- it's a
+        // recovery button for when Layer 1 gets stuck (see its comment at
+        // the click handler), so it should work even if the underlying
+        // apply silently failed.
+        FillRound(g, ToRectF(g_layout.reloadBtn), 8.0f,
+                  g_hoverReload ? kHoverWash : kWhite);
+        StrokeRound(g, ToRectF(g_layout.reloadBtn), 8.0f, kBorder, 1.0f);
+
         // Excluded-processes field (a real EDIT child sits inside this frame)
         FillRound(g, ToRectF(g_layout.excludeField), 8.0f, kWhite);
         StrokeRound(g, ToRectF(g_layout.excludeField), 8.0f, kBorder, 1.0f);
@@ -731,6 +744,9 @@ void PaintWindow(HWND hwnd, HDC target) {
     DrawTextLine(dc, g_layout.customLabel, L"Custom Cursor File", g_fontLabel,
                  isCustom ? kColText : kColDisabled,
                  DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+    DrawTextLine(dc, g_layout.customHelp,
+                 L".cur, .ani, or .ico \u2014 ideally 32\u00D732px (up to 256\u00D7256)",
+                 g_fontHelp, kColHelp, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
     {
         RECT r = g_layout.customField;
         r.left += 12;
@@ -743,6 +759,8 @@ void PaintWindow(HWND hwnd, HDC target) {
     }
     DrawTextLine(dc, g_layout.browseBtn, L"Browse...", g_fontLabel,
                  isCustom ? RGB(255, 255, 255) : kColDisabled,
+                 DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+    DrawTextLine(dc, g_layout.reloadBtn, L"Reload", g_fontLabel, kColText,
                  DT_CENTER | DT_SINGLELINE | DT_VCENTER);
 
     DrawTextLine(dc, g_layout.excludeLabel, L"Excluded Processes", g_fontLabel,
@@ -908,6 +926,16 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 BrowseForCustomCursor(hwnd);
                 return 0;
             }
+            if (PtIn(g_layout.reloadBtn, pt)) {
+                // Forces the overlay to fully rebuild Layer 1 from
+                // scratch (all system cursor roles re-applied) even
+                // though style/invert/path haven't changed -- recovery
+                // for when a custom cursor file occasionally fails to
+                // reapply cleanly. See config.h's layer1ReloadToken.
+                g_settings.layer1ReloadToken++;
+                SaveNow(hwnd);
+                return 0;
+            }
             SetFocus(hwnd);
             return 0;
         }
@@ -931,9 +959,12 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             }
             bool hoverBrowse = (g_styleIndex == kStyleCustom) &&
                                 PtIn(g_layout.browseBtn, pt);
-            if (hoverReset != g_hoverReset || hoverBrowse != g_hoverBrowse) {
+            bool hoverReload = PtIn(g_layout.reloadBtn, pt);
+            if (hoverReset != g_hoverReset || hoverBrowse != g_hoverBrowse ||
+                hoverReload != g_hoverReload) {
                 g_hoverReset = hoverReset;
                 g_hoverBrowse = hoverBrowse;
+                g_hoverReload = hoverReload;
                 InvalidateRect(hwnd, nullptr, FALSE);
             }
 
@@ -947,9 +978,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
         case WM_MOUSELEAVE:
             g_mouseTracking = false;
-            if (g_hoverReset != -1 || g_hoverBrowse) {
+            if (g_hoverReset != -1 || g_hoverBrowse || g_hoverReload) {
                 g_hoverReset = -1;
                 g_hoverBrowse = false;
+                g_hoverReload = false;
                 InvalidateRect(hwnd, nullptr, FALSE);
             }
             return 0;
@@ -970,6 +1002,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                         (g_styleIndex != kStyleCustom &&
                           (PtIn(g_layout.invertBox, pt) || PtIn(g_layout.invertLabel, pt))) ||
                         PtIn(g_layout.startupBox, pt) || PtIn(g_layout.startupLabel, pt) ||
+                        PtIn(g_layout.reloadBtn, pt) ||
                         ((g_styleIndex == kStyleCustom) && PtIn(g_layout.browseBtn, pt));
             for (int i = 0; i < kSliderCount && !hand; ++i) {
                 if (PtIn(g_layout.slReset[i], pt) || PtIn(TrackHitRect(i), pt)) hand = true;

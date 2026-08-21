@@ -46,6 +46,16 @@ struct Settings {
 
     std::string layer1CustomCursorPath;
 
+    // Bumped by the settings GUI's "Reload" button. Not a real setting --
+    // a plain change counter the overlay compares against on its periodic
+    // config reload, so clicking Reload forces a fresh from-scratch
+    // rebuild of Layer 1 (all system cursor roles re-applied) even when
+    // style/invert/path are all unchanged. Exists because a custom cursor
+    // file can occasionally fail to reapply cleanly (a mid-write file, a
+    // transient load failure); Reload is the user's manual recovery
+    // without having to restart the whole overlay process.
+    int layer1ReloadToken = 0;
+
     // Extra process executable names (case-insensitive; include the .exe
     // suffix on Windows, no suffix on Linux) to suspend the overlay for,
     // on top of the built-in default list in anticheat_watcher.cpp. Plain

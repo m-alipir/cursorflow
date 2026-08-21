@@ -100,6 +100,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     std::string appliedLayer1Style = settings.layer1Style;
     bool appliedLayer1Invert = settings.layer1Invert;
     std::string appliedLayer1Path = settings.layer1CustomCursorPath;
+    int appliedLayer1ReloadToken = settings.layer1ReloadToken;
 
     renderer.Configure(settings.blurIntensity, settings.trailLength,
                         settings.ghostScale);
@@ -151,13 +152,15 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
             // restored again.
             if (!suspended && (settings.layer1Style != appliedLayer1Style ||
                                 settings.layer1Invert != appliedLayer1Invert ||
-                                settings.layer1CustomCursorPath != appliedLayer1Path)) {
+                                settings.layer1CustomCursorPath != appliedLayer1Path ||
+                                settings.layer1ReloadToken != appliedLayer1ReloadToken)) {
                 cursor_scheme::ApplyOverride(
                     ParseLayer1Style(settings.layer1Style), settings.layer1Invert,
                     Utf8ToWide(settings.layer1CustomCursorPath));
                 appliedLayer1Style = settings.layer1Style;
                 appliedLayer1Invert = settings.layer1Invert;
                 appliedLayer1Path = settings.layer1CustomCursorPath;
+                appliedLayer1ReloadToken = settings.layer1ReloadToken;
             }
         }
 
