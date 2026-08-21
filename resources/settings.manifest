@@ -17,4 +17,15 @@
                          publicKeyToken="6595b64144ccf1df" language="*" />
     </dependentAssembly>
   </dependency>
+  <!-- Explicit asInvoker: without this, Windows' installer-detection
+       heuristic can decide on its own whether to prompt for elevation.
+       This app never needs admin rights, and declaring that plainly
+       avoids any chance of an unexpected UAC prompt. -->
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
+    <security>
+      <requestedPrivileges>
+        <requestedExecutionLevel level="asInvoker" uiAccess="false" />
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
 </assembly>

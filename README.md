@@ -31,6 +31,8 @@ CursorFlow draws two things on top of your real cursor: a fixed **front cursor**
 2. Run `CursorFlow.exe`. It starts silently in the system tray.
 3. Double-click the tray icon (or right-click → **Settings**) to open the settings window shown below.
 
+> **Windows may show a SmartScreen or "unknown publisher" warning.** This is expected for any small open-source app without a paid code-signing certificate — it isn't a sign of malware. You can inspect every line of source in this repo. To skip the prompt: on the SmartScreen screen, click **More info → Run anyway**; if a file-open warning appears instead, right-click the downloaded `.zip` → **Properties** → check **Unblock** → **OK**, then re-extract.
+
 ### Linux (X11 only — not Wayland)
 
 1. Download the latest `cursorflow-linux-x64.tar.gz` from the [Releases](../../releases) page, or build from source (below).
@@ -69,4 +71,4 @@ See [CMakeLists.txt](CMakeLists.txt) for the exact dependencies per platform.
 
 ## License
 
-Distributed under the MIT License. See [LICENSE](LICENSE) for more information.
+MIT, with the [Commons Clause](https://commonsclause.com/). In short: free to use, modify, and redistribute (including modified versions) — the only thing not allowed is selling the software itself or a product/service whose value comes mainly from it. See [LICENSE](LICENSE) for the full text.
