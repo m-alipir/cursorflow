@@ -37,8 +37,10 @@ constexpr char kDefaultConfigContents[] =
     "rotation_intensity=1.0\n"
     "# spring_speed: multiplier on how fast the ghost catches up (1.0 = default, higher = snappier)\n"
     "spring_speed=1.0\n"
-    "# layer1_style: invert_cross | solid_cross | dot | custom\n"
-    "layer1_style=invert_cross\n"
+    "# layer1_style: thin_cross | thick_cross | dot | custom\n"
+    "layer1_style=thick_cross\n"
+    "# layer1_invert: 1 = high-contrast fill+outline (default), 0 = plain solid black\n"
+    "layer1_invert=1\n"
     "# layer1_custom_path: Xcursor-format cursor file to use when layer1_style=custom\n"
     "layer1_custom_path=\n"
     "# exclude_list: comma-separated extra process names to auto-suspend for\n"
@@ -127,6 +129,8 @@ Settings Load() {
             }
         } else if (key == "layer1_style") {
             settings.layer1Style = value;
+        } else if (key == "layer1_invert") {
+            settings.layer1Invert = (value == "1" || value == "true");
         } else if (key == "layer1_custom_path") {
             settings.layer1CustomCursorPath = value;
         } else if (key == "exclude_list") {
@@ -151,6 +155,7 @@ void Save(const Settings& settings) {
     out << "rotation_intensity=" << settings.rotationIntensity << "\n";
     out << "spring_speed=" << settings.springSpeed << "\n";
     out << "layer1_style=" << settings.layer1Style << "\n";
+    out << "layer1_invert=" << (settings.layer1Invert ? 1 : 0) << "\n";
     out << "layer1_custom_path=" << settings.layer1CustomCursorPath << "\n";
     out << "exclude_list=";
     for (size_t i = 0; i < settings.extraExcludedProcesses.size(); ++i) {

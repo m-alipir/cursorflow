@@ -22,6 +22,7 @@ constexpr int kIdEditExclude = 104;
 constexpr int kIdComboStyle = 107;
 constexpr int kIdEditCustomPath = 108;
 constexpr int kIdButtonBrowse = 109;
+constexpr int kIdCheckInvert = 110;
 constexpr int kIdLabelBlurValue = 201;
 constexpr int kIdLabelTrailValue = 202;
 constexpr int kIdLabelScaleValue = 203;
@@ -111,11 +112,11 @@ std::vector<std::string> SplitExcludeList(const std::wstring& text) {
 // See overlay_window.cpp's tray menu for the same workaround applied
 // earlier.
 constexpr const wchar_t* kStyleNames[] = {
-    L"Ters Renk (Varsay\u0131lan)", L"D\u00FCz Kesi\u015Fim (Eski)",
+    L"\u0130nce Kesi\u015Fim", L"Kal\u0131n Kesi\u015Fim (Varsay\u0131lan)",
     L"Nokta", L"\u00D6zel...",
 };
 constexpr const char* kStyleValues[] = {
-    "invert_cross", "solid_cross", "dot", "custom",
+    "thin_cross", "thick_cross", "dot", "custom",
 };
 constexpr int kStyleCount = 4;
 
@@ -132,12 +133,15 @@ void UpdateValueLabel(HWND hwnd, int labelId, const wchar_t* fmt, double value) 
     SetDlgItemTextW(hwnd, labelId, buf);
 }
 
-void UpdateCustomPathEnabled(HWND hwnd) {
+void UpdateStyleControlsEnabled(HWND hwnd) {
     int styleIndex = static_cast<int>(
         SendDlgItemMessageW(hwnd, kIdComboStyle, CB_GETCURSEL, 0, 0));
     bool isCustom = (styleIndex == 3);  // "\u00D6zel..."
     EnableWindow(GetDlgItem(hwnd, kIdEditCustomPath), isCustom);
     EnableWindow(GetDlgItem(hwnd, kIdButtonBrowse), isCustom);
+    // Invert only applies to the shapes we draw ourselves -- a custom
+    // cursor file's own colors are used as-is (see cursor_scheme.h).
+    EnableWindow(GetDlgItem(hwnd, kIdCheckInvert), !isCustom);
 }
 
 void SaveFromControls(HWND hwnd) {
@@ -157,6 +161,9 @@ void SaveFromControls(HWND hwnd) {
     if (styleIndex < 0) styleIndex = 0;
     g_settings.layer1Style = kStyleValues[styleIndex];
 
+    g_settings.layer1Invert =
+        SendDlgItemMessageW(hwnd, kIdCheckInvert, BM_GETCHECK, 0, 0) == BST_CHECKED;
+
     wchar_t pathBuf[MAX_PATH];
     GetDlgItemTextW(hwnd, kIdEditCustomPath, pathBuf, MAX_PATH);
     g_settings.layer1CustomCursorPath = WideToUtf8(pathBuf);
@@ -172,7 +179,7 @@ void SaveFromControls(HWND hwnd) {
     UpdateValueLabel(hwnd, kIdLabelScaleValue, L"%.2fx", g_settings.ghostScale);
     UpdateValueLabel(hwnd, kIdLabelRotationValue, L"%.2fx", g_settings.rotationIntensity);
     UpdateValueLabel(hwnd, kIdLabelSpeedValue, L"%.2fx", g_settings.springSpeed);
-    UpdateCustomPathEnabled(hwnd);
+    UpdateStyleControlsEnabled(hwnd);
 }
 
 void BrowseForCustomCursor(HWND hwnd) {
@@ -264,6 +271,17 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             SendMessageW(combo, CB_SETCURSEL, StyleToIndex(g_settings.layer1Style), 0);
             y += 36;
 
+            HWND invertCheck = CreateWindowExW(
+                0, L"BUTTON", L"Ters Renkler (Invert)",
+                WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+                kLeft, y, kWidth, 22, hwnd,
+                reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdCheckInvert)),
+                hInst, nullptr);
+            SendMessageW(invertCheck, WM_SETFONT, (WPARAM)g_uiFont, TRUE);
+            SendMessageW(invertCheck, BM_SETCHECK,
+                         g_settings.layer1Invert ? BST_CHECKED : BST_UNCHECKED, 0);
+            y += 32;
+
             HWND customPathEdit = CreateWindowExW(
                 WS_EX_CLIENTEDGE, L"EDIT",
                 Utf8ToWide(g_settings.layer1CustomCursorPath).c_str(),
@@ -301,7 +319,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             UpdateValueLabel(hwnd, kIdLabelScaleValue, L"%.2fx", g_settings.ghostScale);
             UpdateValueLabel(hwnd, kIdLabelRotationValue, L"%.2fx", g_settings.rotationIntensity);
             UpdateValueLabel(hwnd, kIdLabelSpeedValue, L"%.2fx", g_settings.springSpeed);
-            UpdateCustomPathEnabled(hwnd);
+            UpdateStyleControlsEnabled(hwnd);
             return 0;
         }
         case WM_HSCROLL:
@@ -311,6 +329,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (LOWORD(wParam) == kIdButtonBrowse && HIWORD(wParam) == BN_CLICKED) {
                 BrowseForCustomCursor(hwnd);
             } else if (LOWORD(wParam) == kIdComboStyle && HIWORD(wParam) == CBN_SELCHANGE) {
+                SaveFromControls(hwnd);
+            } else if (LOWORD(wParam) == kIdCheckInvert && HIWORD(wParam) == BN_CLICKED) {
                 SaveFromControls(hwnd);
             } else if (HIWORD(wParam) == EN_CHANGE && LOWORD(wParam) == kIdEditExclude) {
                 SaveFromControls(hwnd);
@@ -361,7 +381,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     HWND hwnd = CreateWindowExW(
         0, kClassName, L"Smooth Cursor Overlay \u2014 Ayarlar",
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
-        CW_USEDEFAULT, CW_USEDEFAULT, 460, 700, nullptr, nullptr, hInstance,
+        CW_USEDEFAULT, CW_USEDEFAULT, 460, 730, nullptr, nullptr, hInstance,
         nullptr);
     if (!hwnd) {
         return 0;

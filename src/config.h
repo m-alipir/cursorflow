@@ -31,11 +31,19 @@ struct Settings {
     // this to stay critically damped (no overshoot) at any value.
     float springSpeed = 1.0f;
 
-    // Layer 1 (the real/front cursor override) shape: "invert_cross"
-    // (default -- always contrasts with whatever's behind it), "solid_cross"
-    // (the original plain black cross), "dot", or "custom" (loads
-    // layer1CustomCursorPath, a .cur/.ani/.ico file).
-    std::string layer1Style = "invert_cross";
+    // Layer 1 (the real/front cursor override) shape: "thin_cross" (1px,
+    // the original pre-thickening look), "thick_cross" (3px, default),
+    // "dot", or "custom" (loads layer1CustomCursorPath, a .cur/.ani/.ico
+    // file).
+    std::string layer1Style = "thick_cross";
+
+    // Whether the shape above renders in "invert" color mode (always
+    // contrasts with whatever's behind it, via a screen-color XOR) rather
+    // than plain solid black. Independent of layer1Style -- any shape can
+    // be combined with either color mode. Ignored when layer1Style ==
+    // "custom" (the loaded file's own colors are used as-is).
+    bool layer1Invert = true;
+
     std::string layer1CustomCursorPath;
 
     // Extra process executable names (case-insensitive; include the .exe

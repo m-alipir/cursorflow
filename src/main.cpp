@@ -28,10 +28,10 @@ std::wstring Utf8ToWide(const std::string& s) {
 }
 
 cursor_scheme::Style ParseLayer1Style(const std::string& s) {
-    if (s == "solid_cross") return cursor_scheme::Style::kSolidCross;
+    if (s == "thin_cross") return cursor_scheme::Style::kThinCross;
     if (s == "dot") return cursor_scheme::Style::kDot;
     if (s == "custom") return cursor_scheme::Style::kCustom;
-    return cursor_scheme::Style::kInvertCross;
+    return cursor_scheme::Style::kThickCross;
 }
 
 void AddTrayIcon(HWND hwnd, NOTIFYICONDATAW& nid) {
@@ -90,9 +90,10 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     cursor_shape_sync::CaptureAllRoleCursors(renderer.GetContext(), roleCursors);
 
     cursor_scheme::ApplyOverride(
-        ParseLayer1Style(settings.layer1Style),
+        ParseLayer1Style(settings.layer1Style), settings.layer1Invert,
         Utf8ToWide(settings.layer1CustomCursorPath));
     std::string appliedLayer1Style = settings.layer1Style;
+    bool appliedLayer1Invert = settings.layer1Invert;
     std::string appliedLayer1Path = settings.layer1CustomCursorPath;
 
     renderer.Configure(settings.blurIntensity, settings.trailLength,
@@ -144,11 +145,13 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
             // would needlessly show the override right before it gets
             // restored again.
             if (!suspended && (settings.layer1Style != appliedLayer1Style ||
+                                settings.layer1Invert != appliedLayer1Invert ||
                                 settings.layer1CustomCursorPath != appliedLayer1Path)) {
                 cursor_scheme::ApplyOverride(
-                    ParseLayer1Style(settings.layer1Style),
+                    ParseLayer1Style(settings.layer1Style), settings.layer1Invert,
                     Utf8ToWide(settings.layer1CustomCursorPath));
                 appliedLayer1Style = settings.layer1Style;
+                appliedLayer1Invert = settings.layer1Invert;
                 appliedLayer1Path = settings.layer1CustomCursorPath;
             }
         }
@@ -167,7 +170,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
                 ShowWindow(hwnd, SW_HIDE);
             } else {
                 cursor_scheme::ApplyOverride(
-                    ParseLayer1Style(settings.layer1Style),
+                    ParseLayer1Style(settings.layer1Style), settings.layer1Invert,
                     Utf8ToWide(settings.layer1CustomCursorPath));
                 ShowWindow(hwnd, SW_SHOWNOACTIVATE);
                 lastFrameTime = std::chrono::steady_clock::now();

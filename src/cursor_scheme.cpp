@@ -21,74 +21,77 @@ constexpr int kRowBytes = kSize / 8;  // 1bpp, already WORD-aligned at 32px
 
 using MaskArray = std::array<BYTE, kRowBytes * kSize>;
 
+struct CursorMasks {
+    MaskArray andMask;
+    MaskArray xorMask;
+};
+
+CursorMasks NewBlankMasks() {
+    CursorMasks m;
+    m.andMask.fill(0xFF);  // fully transparent everywhere by default
+    m.xorMask.fill(0x00);
+    return m;
+}
+
+// `invert`: AND=1,XOR=1, the classic Win32 monochrome-cursor "invert"
+// combination (screen color XOR 0xFFFFFF) -- always visible against any
+// background, no fixed color choice needed. When false: plain solid
+// black (AND=0,XOR=0) -- simpler, but can vanish against a dark
+// background.
+void SetPixel(CursorMasks& m, int x, int y, bool invert) {
+    int byteIndex = y * kRowBytes + (x / 8);
+    BYTE bit = static_cast<BYTE>(0x80 >> (x % 8));
+    if (invert) {
+        m.xorMask[byteIndex] |= bit;
+    } else {
+        m.andMask[byteIndex] &= static_cast<BYTE>(~bit);
+    }
+}
+
 // Builds a fixed crosshair cursor, identical regardless of which role it
 // replaces -- Layer 1 must never change shape based on context.
-//
-// `invert`: cross pixels use AND=1, XOR=1, the classic Win32 monochrome-
-// cursor "invert" combination (screen color XOR 0xFFFFFF) -- always
-// visible against any background, no fixed color choice needed. When
-// false, cross pixels are plain solid black (AND=0, XOR=0) -- simpler,
-// but can vanish against a dark background. Everywhere else stays
-// AND=1, XOR=0 (fully transparent).
-HCURSOR BuildCrossCursor(bool invert) {
-    MaskArray andMask{};
-    MaskArray xorMask{};
-    andMask.fill(0xFF);
-    xorMask.fill(0x00);
-
-    auto setArm = [&](int x, int y) {
-        int byteIndex = y * kRowBytes + (x / 8);
-        BYTE bit = static_cast<BYTE>(0x80 >> (x % 8));
-        if (invert) {
-            xorMask[byteIndex] |= bit;  // AND=1, XOR=1 -> invert
-        } else {
-            andMask[byteIndex] &= static_cast<BYTE>(~bit);  // AND=0, XOR=0 -> black
-        }
-    };
+// `halfThickness` 0 = 1px-thick arms (kThinCross), 1 = 3px-thick
+// (kThickCross).
+HCURSOR BuildCrossCursor(bool invert, int halfThickness) {
+    CursorMasks m = NewBlankMasks();
 
     constexpr int kCenter = kSize / 2;
     constexpr int kArmLength = 6;
-    constexpr int kHalfThickness = 1;  // total thickness = 2*kHalfThickness + 1
     for (int i = -kArmLength; i <= kArmLength; ++i) {
-        for (int t = -kHalfThickness; t <= kHalfThickness; ++t) {
-            setArm(kCenter + i, kCenter + t);
-            setArm(kCenter + t, kCenter + i);
+        for (int t = -halfThickness; t <= halfThickness; ++t) {
+            SetPixel(m, kCenter + i, kCenter + t, invert);
+            SetPixel(m, kCenter + t, kCenter + i, invert);
         }
     }
 
     return CreateCursor(GetModuleHandleW(nullptr), kCenter, kCenter, kSize,
-                         kSize, andMask.data(), xorMask.data());
+                         kSize, m.andMask.data(), m.xorMask.data());
 }
 
-// A small filled dot, invert-style for the same always-visible reason as
-// the default cross.
-HCURSOR BuildDotCursor() {
-    MaskArray andMask{};
-    MaskArray xorMask{};
-    andMask.fill(0xFF);
-    xorMask.fill(0x00);
+// A small filled dot.
+HCURSOR BuildDotCursor(bool invert) {
+    CursorMasks m = NewBlankMasks();
 
     constexpr int kCenter = kSize / 2;
     constexpr int kRadius = 4;
     for (int y = -kRadius; y <= kRadius; ++y) {
         for (int x = -kRadius; x <= kRadius; ++x) {
             if (x * x + y * y > kRadius * kRadius) continue;
-            int byteIndex = (kCenter + y) * kRowBytes + ((kCenter + x) / 8);
-            BYTE bit = static_cast<BYTE>(0x80 >> ((kCenter + x) % 8));
-            xorMask[byteIndex] |= bit;  // AND stays 1 -> AND=1,XOR=1 -> invert
+            SetPixel(m, kCenter + x, kCenter + y, invert);
         }
     }
 
     return CreateCursor(GetModuleHandleW(nullptr), kCenter, kCenter, kSize,
-                         kSize, andMask.data(), xorMask.data());
+                         kSize, m.andMask.data(), m.xorMask.data());
 }
 
-HCURSOR BuildStyledCursor(Style style, const std::wstring& customCursorPath) {
+HCURSOR BuildStyledCursor(Style style, bool invert,
+                           const std::wstring& customCursorPath) {
     switch (style) {
-        case Style::kSolidCross:
-            return BuildCrossCursor(/*invert=*/false);
+        case Style::kThinCross:
+            return BuildCrossCursor(invert, /*halfThickness=*/0);
         case Style::kDot:
-            return BuildDotCursor();
+            return BuildDotCursor(invert);
         case Style::kCustom:
             if (!customCursorPath.empty()) {
                 HCURSOR loaded = LoadCursorFromFileW(customCursorPath.c_str());
@@ -104,19 +107,20 @@ HCURSOR BuildStyledCursor(Style style, const std::wstring& customCursorPath) {
                 }
             }
             // Custom file missing/invalid -- fall back rather than fail.
-            return BuildCrossCursor(/*invert=*/true);
-        case Style::kInvertCross:
+            return BuildCrossCursor(/*invert=*/true, /*halfThickness=*/1);
+        case Style::kThickCross:
         default:
-            return BuildCrossCursor(/*invert=*/true);
+            return BuildCrossCursor(invert, /*halfThickness=*/1);
     }
 }
 
 }  // namespace
 
-bool ApplyOverride(Style style, const std::wstring& customCursorPath) {
+bool ApplyOverride(Style style, bool invert,
+                    const std::wstring& customCursorPath) {
     bool allOk = true;
     for (DWORD role : kCursorRoles) {
-        HCURSOR shape = BuildStyledCursor(style, customCursorPath);
+        HCURSOR shape = BuildStyledCursor(style, invert, customCursorPath);
         if (!shape) {
             allOk = false;
             continue;

@@ -18,13 +18,14 @@ struct Widgets {
     GtkWidget* rotationScale;
     GtkWidget* speedScale;
     GtkWidget* styleCombo;
+    GtkWidget* invertCheck;
     GtkWidget* customPathChooser;
     GtkWidget* excludeEntry;
 };
 
 // Index <-> config string mapping for the style combo box; kept in sync
 // with the Windows settings GUI's equivalent list.
-constexpr const char* kStyleIds[] = {"invert_cross", "solid_cross", "dot",
+constexpr const char* kStyleIds[] = {"thin_cross", "thick_cross", "dot",
                                       "custom"};
 constexpr int kStyleCount = 4;
 
@@ -85,9 +86,13 @@ std::vector<std::string> SplitExcludeList(const std::string& text) {
     return result;
 }
 
-void UpdateCustomPathSensitivity(Widgets* w) {
+void UpdateStyleWidgetsSensitivity(Widgets* w) {
     int styleIndex = gtk_combo_box_get_active(GTK_COMBO_BOX(w->styleCombo));
-    gtk_widget_set_sensitive(w->customPathChooser, styleIndex == 3);
+    bool isCustom = (styleIndex == 3);
+    gtk_widget_set_sensitive(w->customPathChooser, isCustom);
+    // Invert only applies to the shapes we draw ourselves -- a custom
+    // cursor file's own colors are used as-is (see cursor_scheme.h).
+    gtk_widget_set_sensitive(w->invertCheck, !isCustom);
 }
 
 void SaveFromWidgets(Widgets* w) {
@@ -106,6 +111,9 @@ void SaveFromWidgets(Widgets* w) {
     if (styleIndex < 0) styleIndex = 0;
     g_settings.layer1Style = kStyleIds[styleIndex];
 
+    g_settings.layer1Invert =
+        gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(w->invertCheck));
+
     char* customPath =
         gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(w->customPathChooser));
     g_settings.layer1CustomCursorPath = customPath ? customPath : "";
@@ -115,7 +123,7 @@ void SaveFromWidgets(Widgets* w) {
     g_settings.extraExcludedProcesses = SplitExcludeList(text);
     config::Save(g_settings);
 
-    UpdateCustomPathSensitivity(w);
+    UpdateStyleWidgetsSensitivity(w);
 }
 
 void OnScaleChanged(GtkRange*, gpointer userData) {
@@ -131,6 +139,10 @@ void OnStyleChanged(GtkComboBox*, gpointer userData) {
 }
 
 void OnCustomPathChanged(GtkFileChooserButton*, gpointer userData) {
+    SaveFromWidgets(static_cast<Widgets*>(userData));
+}
+
+void OnInvertToggled(GtkToggleButton*, gpointer userData) {
     SaveFromWidgets(static_cast<Widgets*>(userData));
 }
 
@@ -171,7 +183,7 @@ int main(int argc, char** argv) {
     // (harmless cosmetically -- _NET_WM_NAME still carries it correctly --
     // but avoiding it entirely is simpler than explaining the warning).
     gtk_window_set_title(GTK_WINDOW(window), "Smooth Cursor Overlay - Ayarlar");
-    gtk_window_set_default_size(GTK_WINDOW(window), 440, 620);
+    gtk_window_set_default_size(GTK_WINDOW(window), 440, 660);
     gtk_container_set_border_width(GTK_CONTAINER(window), 24);
     g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), nullptr);
 
@@ -228,9 +240,9 @@ int main(int argc, char** argv) {
 
     widgets->styleCombo = gtk_combo_box_text_new();
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets->styleCombo),
-                                    "Ters Renk (Varsayılan)");
+                                    "İnce Kesişim");
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets->styleCombo),
-                                    "Düz Kesişim (Eski)");
+                                    "Kalın Kesişim (Varsayılan)");
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets->styleCombo),
                                     "Nokta");
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets->styleCombo),
@@ -238,6 +250,11 @@ int main(int argc, char** argv) {
     gtk_combo_box_set_active(GTK_COMBO_BOX(widgets->styleCombo),
                               StyleToIndex(g_settings.layer1Style));
     gtk_box_pack_start(GTK_BOX(box), widgets->styleCombo, FALSE, FALSE, 4);
+
+    widgets->invertCheck = gtk_check_button_new_with_label("Ters Renkler (Invert)");
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets->invertCheck),
+                                  g_settings.layer1Invert);
+    gtk_box_pack_start(GTK_BOX(box), widgets->invertCheck, FALSE, FALSE, 8);
 
     widgets->customPathChooser = gtk_file_chooser_button_new(
         "Özel imleç dosyası seç", GTK_FILE_CHOOSER_ACTION_OPEN);
@@ -276,12 +293,14 @@ int main(int argc, char** argv) {
                       G_CALLBACK(OnScaleChanged), widgets);
     g_signal_connect(widgets->styleCombo, "changed",
                       G_CALLBACK(OnStyleChanged), widgets);
+    g_signal_connect(widgets->invertCheck, "toggled",
+                      G_CALLBACK(OnInvertToggled), widgets);
     g_signal_connect(widgets->customPathChooser, "file-set",
                       G_CALLBACK(OnCustomPathChanged), widgets);
     g_signal_connect(widgets->excludeEntry, "changed",
                       G_CALLBACK(OnEntryChanged), widgets);
 
-    UpdateCustomPathSensitivity(widgets);
+    UpdateStyleWidgetsSensitivity(widgets);
 
     gtk_widget_show_all(window);
     gtk_main();

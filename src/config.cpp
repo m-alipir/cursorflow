@@ -31,8 +31,10 @@ constexpr wchar_t kDefaultConfigContents[] =
     L"rotation_intensity=1.0\n"
     L"# spring_speed: multiplier on how fast the ghost catches up (1.0 = default, higher = snappier)\n"
     L"spring_speed=1.0\n"
-    L"# layer1_style: invert_cross | solid_cross | dot | custom\n"
-    L"layer1_style=invert_cross\n"
+    L"# layer1_style: thin_cross | thick_cross | dot | custom\n"
+    L"layer1_style=thick_cross\n"
+    L"# layer1_invert: 1 = screen-color invert (default), 0 = plain solid black\n"
+    L"layer1_invert=1\n"
     L"# layer1_custom_path: .cur/.ani/.ico file to use when layer1_style=custom\n"
     L"layer1_custom_path=\n"
     L"# exclude_list: comma-separated extra process names to auto-suspend for\n"
@@ -154,6 +156,8 @@ Settings Load() {
             }
         } else if (key == L"layer1_style") {
             settings.layer1Style = WideToUtf8(value);
+        } else if (key == L"layer1_invert") {
+            settings.layer1Invert = (value == L"1" || value == L"true");
         } else if (key == L"layer1_custom_path") {
             settings.layer1CustomCursorPath = WideToUtf8(value);
         } else if (key == L"exclude_list") {
@@ -178,6 +182,7 @@ void Save(const Settings& settings) {
     out << L"rotation_intensity=" << settings.rotationIntensity << L"\n";
     out << L"spring_speed=" << settings.springSpeed << L"\n";
     out << L"layer1_style=" << Utf8ToWide(settings.layer1Style) << L"\n";
+    out << L"layer1_invert=" << (settings.layer1Invert ? 1 : 0) << L"\n";
     out << L"layer1_custom_path=" << Utf8ToWide(settings.layer1CustomCursorPath) << L"\n";
     out << L"exclude_list=";
     for (size_t i = 0; i < settings.extraExcludedProcesses.size(); ++i) {

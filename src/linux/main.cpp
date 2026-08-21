@@ -24,10 +24,10 @@ constexpr auto kTargetFrameDuration = std::chrono::microseconds(16667);  // ~60f
 int HandleXError(Display*, XErrorEvent*) { return 0; }
 
 cursor_scheme::Style ParseLayer1Style(const std::string& s) {
-    if (s == "solid_cross") return cursor_scheme::Style::kSolidCross;
+    if (s == "thin_cross") return cursor_scheme::Style::kThinCross;
     if (s == "dot") return cursor_scheme::Style::kDot;
     if (s == "custom") return cursor_scheme::Style::kCustom;
-    return cursor_scheme::Style::kInvertCross;
+    return cursor_scheme::Style::kThickCross;
 }
 
 }  // namespace
@@ -68,11 +68,13 @@ int main() {
 
     if (!cursor_scheme::Initialize(display, root,
                                     ParseLayer1Style(settings.layer1Style),
+                                    settings.layer1Invert,
                                     settings.layer1CustomCursorPath)) {
         XCloseDisplay(display);
         return 1;
     }
     std::string appliedLayer1Style = settings.layer1Style;
+    bool appliedLayer1Invert = settings.layer1Invert;
     std::string appliedLayer1Path = settings.layer1CustomCursorPath;
 
     renderer.Configure(settings.blurIntensity, settings.trailLength,
@@ -113,11 +115,14 @@ int main() {
                                 settings.ghostScale);
 
             if (!suspended && (settings.layer1Style != appliedLayer1Style ||
+                                settings.layer1Invert != appliedLayer1Invert ||
                                 settings.layer1CustomCursorPath != appliedLayer1Path)) {
                 cursor_scheme::SetStyle(display, root,
                                          ParseLayer1Style(settings.layer1Style),
+                                         settings.layer1Invert,
                                          settings.layer1CustomCursorPath);
                 appliedLayer1Style = settings.layer1Style;
+                appliedLayer1Invert = settings.layer1Invert;
                 appliedLayer1Path = settings.layer1CustomCursorPath;
             }
         }
