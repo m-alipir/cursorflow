@@ -71,18 +71,18 @@ struct SliderSpec {
 };
 
 const SliderSpec kSliders[kSliderCount] = {
-    {L"Blur Yo\u011Funlu\u011Fu", 0.0f, 2.0f, 1.0f, false},
-    {L"Trail Uzunlu\u011Fu", 0.0f, 100.0f, 24.0f, true},
-    {L"Ghost Boyutu", 0.1f, 4.0f, 1.0f, false},
-    {L"Rotasyon G\u00FCc\u00FC", 0.0f, 3.0f, 1.0f, false},
-    {L"Gelme H\u0131z\u0131 (Snappiness)", 0.1f, 5.0f, 1.0f, false},
+    {L"Blur Intensity", 0.0f, 2.0f, 1.0f, false},
+    {L"Trail Length", 0.0f, 100.0f, 24.0f, true},
+    {L"Ghost Size", 0.1f, 4.0f, 1.0f, false},
+    {L"Rotation Power", 0.0f, 3.0f, 1.0f, false},
+    {L"Follow Speed (Snappiness)", 0.1f, 5.0f, 1.0f, false},
 };
 
 const wchar_t* kStyleNames[] = {
-    L"\u0130nce Kesi\u015Fim",
-    L"Kal\u0131n Kesi\u015Fim (Varsay\u0131lan)",
-    L"Nokta",
-    L"\u00D6zel...",
+    L"Thin Cross",
+    L"Thick Cross (Default)",
+    L"Dot",
+    L"Custom...",
 };
 const char* kStyleValues[] = {"thin_cross", "thick_cross", "dot", "custom"};
 constexpr int kStyleCount = 4;
@@ -102,6 +102,7 @@ struct Layout {
     RECT divider;
     RECT shapeLabel, shapeField;
     RECT invertBox, invertLabel;
+    RECT startupBox, startupLabel;
     RECT customLabel, customField, browseBtn;
     RECT excludeLabel, excludeHelp, excludeField;
     RECT footer;
@@ -146,6 +147,10 @@ Layout ComputeLayout() {
 
     L.invertBox = MakeRect(x, y + 2, 16, 16);
     L.invertLabel = MakeRect(x + 26, y, kContentW - 26, 20);
+    y += 20 + 14;
+
+    L.startupBox = MakeRect(x, y + 2, 16, 16);
+    L.startupLabel = MakeRect(x + 26, y, kContentW - 26, 20);
     y += 20 + 16;
 
     L.customLabel = MakeRect(x, y, kContentW, 20);
@@ -189,6 +194,7 @@ int g_hoverReset = -1;
 bool g_hoverBrowse = false;
 bool g_dirty = false;
 bool g_mouseTracking = false;
+bool g_runAtStartup = false;
 
 constexpr UINT_PTR kTimerAnim = 1;
 constexpr UINT_PTR kTimerSave = 2;
@@ -264,6 +270,51 @@ int StyleToIndex(const std::string& style) {
         if (style == kStyleValues[i]) return i;
     }
     return 1;  // thick_cross
+}
+
+constexpr wchar_t kRunKeyPath[] = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+constexpr wchar_t kRunValueName[] = L"CursorFlow";
+
+// The registry Run key is the actual persistent state here -- there's
+// nothing to keep in config.ini, since Windows itself is the thing that
+// reads this at login. Load queries it once at startup; Set updates it
+// immediately when the checkbox is toggled, same as every other control.
+bool QueryRunAtStartup() {
+    HKEY key;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, kRunKeyPath, 0, KEY_QUERY_VALUE, &key) !=
+        ERROR_SUCCESS) {
+        return false;
+    }
+    DWORD type = 0;
+    LONG result = RegQueryValueExW(key, kRunValueName, nullptr, &type, nullptr, nullptr);
+    RegCloseKey(key);
+    return result == ERROR_SUCCESS && type == REG_SZ;
+}
+
+void SetRunAtStartup(bool enabled) {
+    HKEY key;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, kRunKeyPath, 0, KEY_SET_VALUE, &key) !=
+        ERROR_SUCCESS) {
+        return;
+    }
+    if (enabled) {
+        // Point at the overlay itself (CursorFlow.exe), not this
+        // settings process -- it's expected to sit next to this exe, same
+        // assumption overlay_window.cpp's LaunchSettingsWindow makes in
+        // the other direction.
+        wchar_t selfPath[MAX_PATH];
+        GetModuleFileNameW(nullptr, selfPath, MAX_PATH);
+        std::wstring path(selfPath);
+        size_t slash = path.find_last_of(L"\\/");
+        std::wstring dir = slash == std::wstring::npos ? L"." : path.substr(0, slash);
+        std::wstring value = L"\"" + dir + L"\\CursorFlow.exe\"";
+        RegSetValueExW(key, kRunValueName, 0, REG_SZ,
+                       reinterpret_cast<const BYTE*>(value.c_str()),
+                       static_cast<DWORD>((value.size() + 1) * sizeof(wchar_t)));
+    } else {
+        RegDeleteValueW(key, kRunValueName);
+    }
+    RegCloseKey(key);
 }
 
 bool PtIn(const RECT& r, POINT p) { return PtInRect(&r, p) != 0; }
@@ -343,6 +394,24 @@ void DrawResetIcon(Graphics& g, const RECT& box, const Color& c) {
     g.FillPolygon(&br, head, 3);
 }
 
+void DrawCheckbox(Graphics& g, const RECT& box, bool checked, bool disabled) {
+    RectF r = ToRectF(box);
+    if (disabled) {
+        FillRound(g, r, 4.0f, kFieldDisabledBg);
+        StrokeRound(g, r, 4.0f, kBorder, 1.0f);
+    } else if (checked) {
+        FillRound(g, r, 4.0f, kAccent);
+        Pen pen(kWhite, 2.0f);
+        pen.SetStartCap(LineCapRound);
+        pen.SetEndCap(LineCapRound);
+        g.DrawLine(&pen, r.X + 3.5f, r.Y + 8.0f, r.X + 6.5f, r.Y + 11.5f);
+        g.DrawLine(&pen, r.X + 6.5f, r.Y + 11.5f, r.X + 12.5f, r.Y + 4.5f);
+    } else {
+        FillRound(g, r, 4.0f, kWhite);
+        StrokeRound(g, r, 4.0f, kBorder, 1.5f);
+    }
+}
+
 void DrawTextLine(HDC dc, const RECT& r, const wchar_t* text, HFONT font,
                    COLORREF color, UINT format) {
     HFONT old = static_cast<HFONT>(SelectObject(dc, font));
@@ -364,7 +433,7 @@ float SliderFraction(int i) {
 
 void FormatSliderValue(int i, wchar_t* buf, size_t count) {
     if (kSliders[i].integral) {
-        swprintf_s(buf, count, L"%d nokta", static_cast<int>(g_sliderValues[i] + 0.5f));
+        swprintf_s(buf, count, L"%d points", static_cast<int>(g_sliderValues[i] + 0.5f));
     } else {
         swprintf_s(buf, count, L"%.2fx", g_sliderValues[i]);
     }
@@ -481,7 +550,7 @@ void PaintPreview(Graphics& g, HDC dc, const RECT& box) {
     g.Flush(FlushIntentionSync);
 
     // The front cursor is drawn with GDI region ops rather than GDI+ so the
-    // "Ters Renkler" mode can use a true pixel inversion (InvertRgn), the
+    // "Invert Colors" mode can use a true pixel inversion (InvertRgn), the
     // same effect the real Layer 1 cursor gets from its AND/XOR masks --
     // most visible where it crosses the blue trail.
     int fx = static_cast<int>(ox + g_preview.targetX + 0.5f);
@@ -609,24 +678,9 @@ void PaintWindow(HWND hwnd, HDC target) {
             g.DrawLine(&pen, cx, cy + 2.5f, cx + 4.0f, cy - 2.0f);
         }
 
-        // Invert checkbox
-        {
-            RectF box = ToRectF(g_layout.invertBox);
-            if (isCustom) {
-                FillRound(g, box, 4.0f, kFieldDisabledBg);
-                StrokeRound(g, box, 4.0f, kBorder, 1.0f);
-            } else if (g_settings.layer1Invert) {
-                FillRound(g, box, 4.0f, kAccent);
-                Pen pen(kWhite, 2.0f);
-                pen.SetStartCap(LineCapRound);
-                pen.SetEndCap(LineCapRound);
-                g.DrawLine(&pen, box.X + 3.5f, box.Y + 8.0f, box.X + 6.5f, box.Y + 11.5f);
-                g.DrawLine(&pen, box.X + 6.5f, box.Y + 11.5f, box.X + 12.5f, box.Y + 4.5f);
-            } else {
-                FillRound(g, box, 4.0f, kWhite);
-                StrokeRound(g, box, 4.0f, kBorder, 1.5f);
-            }
-        }
+        // Invert and run-at-startup checkboxes
+        DrawCheckbox(g, g_layout.invertBox, g_settings.layer1Invert, isCustom);
+        DrawCheckbox(g, g_layout.startupBox, g_runAtStartup, false);
 
         // Custom cursor path field + browse button
         FillRound(g, ToRectF(g_layout.customField), 8.0f,
@@ -643,9 +697,9 @@ void PaintWindow(HWND hwnd, HDC target) {
     }
 
     // ---- Text (always on top of the shapes above) ----
-    DrawTextLine(dc, g_layout.title, L"Smooth Cursor Overlay", g_fontTitle, kColText,
+    DrawTextLine(dc, g_layout.title, L"CursorFlow", g_fontTitle, kColText,
                  DT_LEFT | DT_SINGLELINE | DT_VCENTER);
-    DrawTextLine(dc, g_layout.subtitle, L"Ayarlar", g_fontSub, kColMuted,
+    DrawTextLine(dc, g_layout.subtitle, L"Settings", g_fontSub, kColMuted,
                  DT_LEFT | DT_SINGLELINE | DT_VCENTER);
 
     for (int i = 0; i < kSliderCount; ++i) {
@@ -657,7 +711,7 @@ void PaintWindow(HWND hwnd, HDC target) {
                      DT_RIGHT | DT_SINGLELINE | DT_VCENTER);
     }
 
-    DrawTextLine(dc, g_layout.shapeLabel, L"\u00D6n \u0130mle\u00E7 (Layer 1) \u015Eekli", g_fontLabel,
+    DrawTextLine(dc, g_layout.shapeLabel, L"Front Cursor (Layer 1) Shape", g_fontLabel,
                  kColText, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
     {
         RECT r = g_layout.shapeField;
@@ -667,11 +721,14 @@ void PaintWindow(HWND hwnd, HDC target) {
                      DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
     }
 
-    DrawTextLine(dc, g_layout.invertLabel, L"Ters Renkler (Invert)", g_fontField,
+    DrawTextLine(dc, g_layout.invertLabel, L"Invert Colors", g_fontField,
                  isCustom ? kColDisabled : kColText,
                  DT_LEFT | DT_SINGLELINE | DT_VCENTER);
 
-    DrawTextLine(dc, g_layout.customLabel, L"\u00D6zel \u0130mle\u00E7 Dosyas\u0131", g_fontLabel,
+    DrawTextLine(dc, g_layout.startupLabel, L"Run at Windows Startup", g_fontField,
+                 kColText, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+
+    DrawTextLine(dc, g_layout.customLabel, L"Custom Cursor File", g_fontLabel,
                  isCustom ? kColText : kColDisabled,
                  DT_LEFT | DT_SINGLELINE | DT_VCENTER);
     {
@@ -679,25 +736,25 @@ void PaintWindow(HWND hwnd, HDC target) {
         r.left += 12;
         r.right -= 12;
         std::wstring path = Utf8ToWide(g_settings.layer1CustomCursorPath);
-        const wchar_t* shown = path.empty() ? L"Dosya se\u00E7ilmedi" : path.c_str();
+        const wchar_t* shown = path.empty() ? L"No file selected" : path.c_str();
         COLORREF col = !isCustom ? kColDisabled : (path.empty() ? kColHelp : kColText);
         DrawTextLine(dc, r, shown, g_fontField, col,
                      DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_PATH_ELLIPSIS);
     }
-    DrawTextLine(dc, g_layout.browseBtn, L"G\u00F6zat...", g_fontLabel,
+    DrawTextLine(dc, g_layout.browseBtn, L"Browse...", g_fontLabel,
                  isCustom ? RGB(255, 255, 255) : kColDisabled,
                  DT_CENTER | DT_SINGLELINE | DT_VCENTER);
 
-    DrawTextLine(dc, g_layout.excludeLabel, L"Hari\u00E7 Tutulan \u0130\u015Flemler", g_fontLabel,
+    DrawTextLine(dc, g_layout.excludeLabel, L"Excluded Processes", g_fontLabel,
                  kColText, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
     DrawTextLine(dc, g_layout.excludeHelp,
-                 L"Bu programlar (.exe) \u00F6n planda \u00E7al\u0131\u015F\u0131rken overlay otomatik "
-                 L"olarak devre d\u0131\u015F\u0131 kal\u0131r \u2014 \u00F6rn. tam ekran oyunlar veya "
-                 L"anti-cheat korumal\u0131 uygulamalar. Virg\u00FClle ay\u0131r\u0131n.",
+                 L"The overlay automatically disables itself while these "
+                 L"programs (.exe) are in the foreground \u2014 e.g. fullscreen "
+                 L"games or anti-cheat-protected apps. Separate with commas.",
                  g_fontHelp, kColHelp, DT_LEFT | DT_WORDBREAK);
 
     DrawTextLine(dc, g_layout.footer,
-                 L"De\u011Fi\u015Fiklikler yakla\u015F\u0131k 1 saniye i\u00E7inde otomatik uygulan\u0131r.",
+                 L"Changes apply automatically within about a second.",
                  g_fontHelp, kColHelp, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
 
     BitBlt(target, 0, 0, w, h, dc, 0, 0, SRCCOPY);
@@ -754,7 +811,7 @@ void BrowseForCustomCursor(HWND hwnd) {
     OPENFILENAMEW ofn{};
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = hwnd;
-    ofn.lpstrFilter = L"Cursor dosyalar\u0131 (*.cur;*.ani;*.ico)\0*.cur;*.ani;*.ico\0T\u00FCm dosyalar\0*.*\0";
+    ofn.lpstrFilter = L"Cursor files (*.cur;*.ani;*.ico)\0*.cur;*.ani;*.ico\0All files\0*.*\0";
     ofn.lpstrFile = pathBuf;
     ofn.nMaxFile = MAX_PATH;
     ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
@@ -841,6 +898,12 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 InvalidateRect(hwnd, nullptr, FALSE);
                 return 0;
             }
+            if (PtIn(g_layout.startupBox, pt) || PtIn(g_layout.startupLabel, pt)) {
+                g_runAtStartup = !g_runAtStartup;
+                SetRunAtStartup(g_runAtStartup);
+                InvalidateRect(hwnd, nullptr, FALSE);
+                return 0;
+            }
             if (isCustom && PtIn(g_layout.browseBtn, pt)) {
                 BrowseForCustomCursor(hwnd);
                 return 0;
@@ -906,6 +969,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             bool hand = PtIn(g_layout.shapeField, pt) ||
                         (g_styleIndex != kStyleCustom &&
                           (PtIn(g_layout.invertBox, pt) || PtIn(g_layout.invertLabel, pt))) ||
+                        PtIn(g_layout.startupBox, pt) || PtIn(g_layout.startupLabel, pt) ||
                         ((g_styleIndex == kStyleCustom) && PtIn(g_layout.browseBtn, pt));
             for (int i = 0; i < kSliderCount && !hand; ++i) {
                 if (PtIn(g_layout.slReset[i], pt) || PtIn(TrackHitRect(i), pt)) hand = true;
@@ -959,6 +1023,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
 
     g_settings = config::Load();
     PullFromSettings();
+    g_runAtStartup = QueryRunAtStartup();
     g_layout = ComputeLayout();
 
     g_whiteBrush = CreateSolidBrush(kColBg);
@@ -973,7 +1038,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     g_fontField = mkFont(-14, FW_NORMAL);
     g_fontHelp = mkFont(-12, FW_NORMAL);
 
-    constexpr wchar_t kClassName[] = L"SmoothCursorOverlaySettingsWindow";
+    constexpr wchar_t kClassName[] = L"CursorFlowSettingsWindow";
     WNDCLASSEXW wc{};
     wc.cbSize = sizeof(wc);
     wc.lpfnWndProc = WindowProc;
@@ -992,7 +1057,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     AdjustWindowRect(&want, style, FALSE);
 
     HWND hwnd = CreateWindowExW(
-        0, kClassName, L"Smooth Cursor Overlay \u2014 Ayarlar", style,
+        0, kClassName, L"CursorFlow \u2014 Settings", style,
         CW_USEDEFAULT, CW_USEDEFAULT, want.right - want.left, want.bottom - want.top,
         nullptr, nullptr, hInstance, nullptr);
     if (!hwnd) {

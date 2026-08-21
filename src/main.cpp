@@ -47,7 +47,7 @@ void AddTrayIcon(HINSTANCE hInstance, HWND hwnd, NOTIFYICONDATAW& nid) {
     nid.hIcon = static_cast<HICON>(LoadImageW(
         hInstance, L"MAINICON", IMAGE_ICON, GetSystemMetrics(SM_CXSMICON),
         GetSystemMetrics(SM_CYSMICON), LR_DEFAULTCOLOR));
-    wcscpy_s(nid.szTip, L"Smooth Cursor Overlay");
+    wcscpy_s(nid.szTip, L"CursorFlow");
     Shell_NotifyIconW(NIM_ADD, &nid);
 }
 

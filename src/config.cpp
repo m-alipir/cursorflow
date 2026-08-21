@@ -20,7 +20,7 @@ std::wstring GetConfigPath() {
 }
 
 constexpr wchar_t kDefaultConfigContents[] =
-    L"# Smooth Cursor Overlay config\n"
+    L"# CursorFlow config\n"
     L"# blur_intensity: multiplier on the built-in blur strength (0 = off, 1 = default)\n"
     L"blur_intensity=1.0\n"
     L"# trail_length: number of fading trail points (0 = off, higher = longer tail)\n"
@@ -175,7 +175,7 @@ void Save(const Settings& settings) {
         return;
     }
 
-    out << L"# Smooth Cursor Overlay config\n";
+    out << L"# CursorFlow config\n";
     out << L"blur_intensity=" << settings.blurIntensity << L"\n";
     out << L"trail_length=" << settings.trailLength << L"\n";
     out << L"ghost_scale=" << settings.ghostScale << L"\n";

@@ -1,16 +1,16 @@
 cmake_minimum_required(VERSION 3.25)
 
 if(WIN32)
-    project(SmoothCursorOverlay LANGUAGES CXX RC)
+    project(CursorFlow LANGUAGES CXX RC)
 else()
-    project(SmoothCursorOverlay LANGUAGES CXX)
+    project(CursorFlow LANGUAGES CXX)
 endif()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if(WIN32)
-    add_executable(SmoothCursorOverlay WIN32
+    add_executable(CursorFlow WIN32
         src/main.cpp
         src/cursor_scheme.cpp
         src/cursor_scheme.h
@@ -33,7 +33,7 @@ if(WIN32)
         resources/app.rc
     )
 
-    target_compile_definitions(SmoothCursorOverlay PRIVATE
+    target_compile_definitions(CursorFlow PRIVATE
         UNICODE
         _UNICODE
         WIN32_LEAN_AND_MEAN
@@ -42,9 +42,9 @@ if(WIN32)
         _WIN32_WINNT=0x0A00
     )
 
-    target_include_directories(SmoothCursorOverlay PRIVATE src)
+    target_include_directories(CursorFlow PRIVATE src)
 
-    target_link_libraries(SmoothCursorOverlay PRIVATE
+    target_link_libraries(CursorFlow PRIVATE
         d2d1
         dwrite
         dxgi
@@ -60,20 +60,20 @@ if(WIN32)
     # app.rc already embeds our PerMonitorV2 manifest as resource ID 1;
     # disable the linker's own auto-generated manifest to avoid a
     # duplicate MANIFEST resource.
-    target_link_options(SmoothCursorOverlay PRIVATE /MANIFEST:NO)
+    target_link_options(CursorFlow PRIVATE /MANIFEST:NO)
 
-    # Standalone settings GUI (see overlay_window.cpp's tray "Ayarlar" menu
+    # Standalone settings GUI (see overlay_window.cpp's tray "Settings" menu
     # item, which launches this by name next to the main exe). Shares
     # config.h/.cpp with the overlay -- same Settings struct, same
     # config.ini format -- so the two never drift out of sync.
-    add_executable(SmoothCursorOverlaySettings WIN32
+    add_executable(CursorFlowSettings WIN32
         src/settings_main.cpp
         src/config.cpp
         src/config.h
         resources/settings.rc
     )
 
-    target_compile_definitions(SmoothCursorOverlaySettings PRIVATE
+    target_compile_definitions(CursorFlowSettings PRIVATE
         UNICODE
         _UNICODE
         WIN32_LEAN_AND_MEAN
@@ -82,9 +82,9 @@ if(WIN32)
         _WIN32_WINNT=0x0A00
     )
 
-    target_include_directories(SmoothCursorOverlaySettings PRIVATE src)
+    target_include_directories(CursorFlowSettings PRIVATE src)
 
-    target_link_libraries(SmoothCursorOverlaySettings PRIVATE
+    target_link_libraries(CursorFlowSettings PRIVATE
         comctl32
         user32
         gdi32
@@ -92,7 +92,7 @@ if(WIN32)
         comdlg32
     )
 
-    target_link_options(SmoothCursorOverlaySettings PRIVATE /MANIFEST:NO)
+    target_link_options(CursorFlowSettings PRIVATE /MANIFEST:NO)
 
 elseif(UNIX AND NOT APPLE)
     # X11 (Xlib + XFixes + XInput2 + Xext/Shape + Xcursor) is the target --
@@ -119,7 +119,7 @@ elseif(UNIX AND NOT APPLE)
 
     find_package(Threads REQUIRED)
 
-    add_executable(SmoothCursorOverlay
+    add_executable(CursorFlow
         src/physics.cpp
         src/physics.h
         src/config.h
@@ -141,13 +141,13 @@ elseif(UNIX AND NOT APPLE)
         src/linux/anticheat_watcher.h
     )
 
-    target_include_directories(SmoothCursorOverlay PRIVATE
+    target_include_directories(CursorFlow PRIVATE
         src
         src/linux
         ${X11_INCLUDE_DIR}
     )
 
-    target_link_libraries(SmoothCursorOverlay PRIVATE
+    target_link_libraries(CursorFlow PRIVATE
         ${X11_LIBRARIES}
         ${X11_Xfixes_LIB}
         ${X11_Xi_LIB}
@@ -162,18 +162,18 @@ elseif(UNIX AND NOT APPLE)
     # Settings struct, same config.ini format -- so the two never drift
     # out of sync. A separate executable rather than adding a Linux tray-
     # icon subsystem, which X11 has no single standard protocol for.
-    add_executable(SmoothCursorOverlaySettings
+    add_executable(CursorFlowSettings
         src/linux/settings_main.cpp
         src/linux/config.cpp
         src/config.h
     )
 
-    target_include_directories(SmoothCursorOverlaySettings PRIVATE
+    target_include_directories(CursorFlowSettings PRIVATE
         src
         src/linux
     )
 
-    target_link_libraries(SmoothCursorOverlaySettings PRIVATE
+    target_link_libraries(CursorFlowSettings PRIVATE
         PkgConfig::GTK3
     )
 else()

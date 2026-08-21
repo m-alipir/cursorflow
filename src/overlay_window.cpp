@@ -7,10 +7,10 @@
 namespace overlay_window {
 namespace {
 
-constexpr wchar_t kClassName[] = L"SmoothCursorOverlayGhostWindow";
+constexpr wchar_t kClassName[] = L"CursorFlowGhostWindow";
 
 // Launches the standalone settings GUI, expected to sit next to this exe
-// as "SmoothCursorOverlaySettings.exe". It edits config.ini directly; the
+// as "CursorFlowSettings.exe". It edits config.ini directly; the
 // overlay picks up changes within about a second (see main.cpp's periodic
 // reload), so no IPC between the two processes is needed.
 void LaunchSettingsWindow() {
@@ -19,7 +19,7 @@ void LaunchSettingsWindow() {
     std::wstring path(exePath);
     size_t slash = path.find_last_of(L"\\/");
     std::wstring dir = slash == std::wstring::npos ? L"." : path.substr(0, slash);
-    std::wstring settingsExe = dir + L"\\SmoothCursorOverlaySettings.exe";
+    std::wstring settingsExe = dir + L"\\CursorFlowSettings.exe";
 
     ShellExecuteW(nullptr, L"open", settingsExe.c_str(), nullptr, dir.c_str(),
                   SW_SHOWNORMAL);
@@ -32,9 +32,9 @@ void ShowTrayMenu(HWND hwnd, WindowContext* ctx) {
     HMENU menu = CreatePopupMenu();
     AppendMenuW(menu,
                 MF_STRING | ((ctx && ctx->manuallyDisabled) ? 0 : MF_CHECKED),
-                kMenuIdToggle, L"Etkin");
-    AppendMenuW(menu, MF_STRING, kMenuIdSettings, L"Ayarlar");
-    AppendMenuW(menu, MF_STRING, kMenuIdExit, L"\xC7\x131k\x131\x15f");  // "Çıkış"
+                kMenuIdToggle, L"Enabled");
+    AppendMenuW(menu, MF_STRING, kMenuIdSettings, L"Settings");
+    AppendMenuW(menu, MF_STRING, kMenuIdExit, L"Exit");
 
     // Standard tray-menu dismiss-on-click-away workaround (documented by
     // Microsoft): the window must be foreground while the menu is tracked,
@@ -118,7 +118,7 @@ HWND Create(HINSTANCE hInstance, const RECT& bounds) {
     HWND hwnd = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST |
             WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-        kClassName, L"Smooth Cursor Overlay", WS_POPUP,
+        kClassName, L"CursorFlow", WS_POPUP,
         bounds.left, bounds.top, bounds.right - bounds.left,
         bounds.bottom - bounds.top, nullptr, nullptr, hInstance, nullptr);
 

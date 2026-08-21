@@ -1,8 +1,13 @@
 #include <gtk/gtk.h>
 
 #include <algorithm>
+#include <cstdio>
+#include <cstdlib>
+#include <fstream>
 #include <sstream>
 #include <string>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <vector>
 
 #include "config.h"
@@ -19,6 +24,7 @@ struct Widgets {
     GtkWidget* speedScale;
     GtkWidget* styleCombo;
     GtkWidget* invertCheck;
+    GtkWidget* startupCheck;
     GtkWidget* customPathChooser;
     GtkWidget* excludeEntry;
 };
@@ -34,6 +40,63 @@ int StyleToIndex(const std::string& style) {
         if (style == kStyleIds[i]) return i;
     }
     return 0;
+}
+
+// ---------------------------------------------------------------------------
+// Run at startup: an XDG autostart .desktop entry is the Linux equivalent of
+// the Windows port's registry Run key -- most desktop environments (GNOME,
+// KDE, Xfce, ...) look under ~/.config/autostart at login without needing
+// per-DE integration. Like the Windows port, this is queried/written
+// directly against the OS mechanism rather than round-tripped through
+// config.ini, since the autostart file itself IS the persistent state.
+// ---------------------------------------------------------------------------
+std::string AutostartDesktopPath() {
+    const char* home = getenv("HOME");
+    if (!home || !*home) return "";
+    return std::string(home) + "/.config/autostart/cursorflow.desktop";
+}
+
+// The overlay binary ("CursorFlow") is expected to sit next to this
+// settings binary, same assumption the Windows port makes in both
+// directions between its two exes.
+std::string OverlayExecutablePath() {
+    char buf[4096];
+    ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    if (len <= 0) return "";
+    buf[len] = '\0';
+    std::string path(buf);
+    size_t slash = path.find_last_of('/');
+    std::string dir = slash == std::string::npos ? "." : path.substr(0, slash);
+    return dir + "/CursorFlow";
+}
+
+bool QueryRunAtStartup() {
+    std::string path = AutostartDesktopPath();
+    if (path.empty()) return false;
+    std::ifstream f(path);
+    return f.good();
+}
+
+void SetRunAtStartup(bool enabled) {
+    std::string path = AutostartDesktopPath();
+    if (path.empty()) return;
+
+    if (enabled) {
+        const char* home = getenv("HOME");
+        mkdir((std::string(home) + "/.config").c_str(), 0755);
+        mkdir((std::string(home) + "/.config/autostart").c_str(), 0755);
+
+        std::ofstream f(path);
+        if (f) {
+            f << "[Desktop Entry]\n"
+              << "Type=Application\n"
+              << "Name=CursorFlow\n"
+              << "Exec=\"" << OverlayExecutablePath() << "\"\n"
+              << "X-GNOME-Autostart-enabled=true\n";
+        }
+    } else {
+        remove(path.c_str());
+    }
 }
 
 // Modern flat "snow white" theme: plain white background, thin flat
@@ -146,6 +209,10 @@ void OnInvertToggled(GtkToggleButton*, gpointer userData) {
     SaveFromWidgets(static_cast<Widgets*>(userData));
 }
 
+void OnStartupToggled(GtkToggleButton* btn, gpointer) {
+    SetRunAtStartup(gtk_toggle_button_get_active(btn));
+}
+
 gchar* FormatMultiplier(GtkScale*, gdouble value, gpointer) {
     return g_strdup_printf("%.2fx", value);
 }
@@ -178,12 +245,8 @@ int main(int argc, char** argv) {
         GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
 
     GtkWidget* window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    // A plain hyphen, not an em-dash: some X11/legacy-locale setups fail to
-    // convert non-ASCII window titles for the legacy WM_NAME property
-    // (harmless cosmetically -- _NET_WM_NAME still carries it correctly --
-    // but avoiding it entirely is simpler than explaining the warning).
-    gtk_window_set_title(GTK_WINDOW(window), "Smooth Cursor Overlay - Ayarlar");
-    gtk_window_set_default_size(GTK_WINDOW(window), 440, 660);
+    gtk_window_set_title(GTK_WINDOW(window), "CursorFlow - Settings");
+    gtk_window_set_default_size(GTK_WINDOW(window), 440, 700);
     gtk_container_set_border_width(GTK_CONTAINER(window), 24);
     g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), nullptr);
 
@@ -198,7 +261,7 @@ int main(int argc, char** argv) {
     gtk_scale_set_value_pos(GTK_SCALE(widgets->blurScale), GTK_POS_RIGHT);
     g_signal_connect(widgets->blurScale, "format-value",
                       G_CALLBACK(FormatMultiplier), nullptr);
-    AddSection(box, "Blur Yoğunluğu", widgets->blurScale);
+    AddSection(box, "Blur Intensity", widgets->blurScale);
 
     widgets->trailScale = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL,
                                                      0.0, 100.0, 1.0);
@@ -206,7 +269,7 @@ int main(int argc, char** argv) {
     gtk_scale_set_value_pos(GTK_SCALE(widgets->trailScale), GTK_POS_RIGHT);
     g_signal_connect(widgets->trailScale, "format-value",
                       G_CALLBACK(FormatCount), nullptr);
-    AddSection(box, "Trail Uzunluğu", widgets->trailScale);
+    AddSection(box, "Trail Length", widgets->trailScale);
 
     widgets->ghostScale = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL,
                                                      0.1, 4.0, 0.01);
@@ -214,7 +277,7 @@ int main(int argc, char** argv) {
     gtk_scale_set_value_pos(GTK_SCALE(widgets->ghostScale), GTK_POS_RIGHT);
     g_signal_connect(widgets->ghostScale, "format-value",
                       G_CALLBACK(FormatMultiplier), nullptr);
-    AddSection(box, "Ghost Boyutu", widgets->ghostScale);
+    AddSection(box, "Ghost Size", widgets->ghostScale);
 
     widgets->rotationScale = gtk_scale_new_with_range(
         GTK_ORIENTATION_HORIZONTAL, 0.0, 3.0, 0.01);
@@ -223,7 +286,7 @@ int main(int argc, char** argv) {
     gtk_scale_set_value_pos(GTK_SCALE(widgets->rotationScale), GTK_POS_RIGHT);
     g_signal_connect(widgets->rotationScale, "format-value",
                       G_CALLBACK(FormatMultiplier), nullptr);
-    AddSection(box, "Rotasyon Gücü", widgets->rotationScale);
+    AddSection(box, "Rotation Power", widgets->rotationScale);
 
     widgets->speedScale = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL,
                                                      0.1, 5.0, 0.01);
@@ -231,33 +294,38 @@ int main(int argc, char** argv) {
     gtk_scale_set_value_pos(GTK_SCALE(widgets->speedScale), GTK_POS_RIGHT);
     g_signal_connect(widgets->speedScale, "format-value",
                       G_CALLBACK(FormatMultiplier), nullptr);
-    AddSection(box, "Gelme Hızı (Snappiness)", widgets->speedScale);
+    AddSection(box, "Follow Speed (Snappiness)", widgets->speedScale);
 
-    GtkWidget* styleLabel = gtk_label_new("Ön İmleç (Layer 1) Şekli");
+    GtkWidget* styleLabel = gtk_label_new("Front Cursor (Layer 1) Shape");
     gtk_widget_set_halign(styleLabel, GTK_ALIGN_START);
     gtk_style_context_add_class(gtk_widget_get_style_context(styleLabel), "section");
     gtk_box_pack_start(GTK_BOX(box), styleLabel, FALSE, FALSE, 4);
 
     widgets->styleCombo = gtk_combo_box_text_new();
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets->styleCombo),
-                                    "İnce Kesişim");
+                                    "Thin Cross");
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets->styleCombo),
-                                    "Kalın Kesişim (Varsayılan)");
+                                    "Thick Cross (Default)");
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets->styleCombo),
-                                    "Nokta");
+                                    "Dot");
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets->styleCombo),
-                                    "Özel...");
+                                    "Custom...");
     gtk_combo_box_set_active(GTK_COMBO_BOX(widgets->styleCombo),
                               StyleToIndex(g_settings.layer1Style));
     gtk_box_pack_start(GTK_BOX(box), widgets->styleCombo, FALSE, FALSE, 4);
 
-    widgets->invertCheck = gtk_check_button_new_with_label("Ters Renkler (Invert)");
+    widgets->invertCheck = gtk_check_button_new_with_label("Invert Colors");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets->invertCheck),
                                   g_settings.layer1Invert);
-    gtk_box_pack_start(GTK_BOX(box), widgets->invertCheck, FALSE, FALSE, 8);
+    gtk_box_pack_start(GTK_BOX(box), widgets->invertCheck, FALSE, FALSE, 4);
+
+    widgets->startupCheck = gtk_check_button_new_with_label("Run at Startup");
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widgets->startupCheck),
+                                  QueryRunAtStartup());
+    gtk_box_pack_start(GTK_BOX(box), widgets->startupCheck, FALSE, FALSE, 8);
 
     widgets->customPathChooser = gtk_file_chooser_button_new(
-        "Özel imleç dosyası seç", GTK_FILE_CHOOSER_ACTION_OPEN);
+        "Select a custom cursor file", GTK_FILE_CHOOSER_ACTION_OPEN);
     if (!g_settings.layer1CustomCursorPath.empty()) {
         gtk_file_chooser_set_filename(
             GTK_FILE_CHOOSER(widgets->customPathChooser),
@@ -265,17 +333,27 @@ int main(int argc, char** argv) {
     }
     gtk_box_pack_start(GTK_BOX(box), widgets->customPathChooser, FALSE, FALSE, 4);
 
-    GtkWidget* excludeLabel = gtk_label_new("Hariç Tutulan İşlemler (virgülle ayrılış)");
+    GtkWidget* excludeLabel = gtk_label_new("Excluded Processes");
     gtk_widget_set_halign(excludeLabel, GTK_ALIGN_START);
     gtk_style_context_add_class(gtk_widget_get_style_context(excludeLabel), "section");
     gtk_box_pack_start(GTK_BOX(box), excludeLabel, FALSE, FALSE, 12);
 
+    GtkWidget* excludeHelp = gtk_label_new(
+        "The overlay automatically disables itself while these programs are "
+        "in the foreground -- e.g. fullscreen games or anti-cheat-protected "
+        "apps. Separate with commas.");
+    gtk_widget_set_halign(excludeHelp, GTK_ALIGN_START);
+    gtk_label_set_line_wrap(GTK_LABEL(excludeHelp), TRUE);
+    gtk_style_context_add_class(gtk_widget_get_style_context(excludeHelp), "hint");
+    gtk_box_pack_start(GTK_BOX(box), excludeHelp, FALSE, FALSE, 2);
+
     widgets->excludeEntry = gtk_entry_new();
     gtk_entry_set_text(GTK_ENTRY(widgets->excludeEntry), JoinExcludeList(g_settings).c_str());
+    gtk_entry_set_placeholder_text(GTK_ENTRY(widgets->excludeEntry), "e.g. game, csgo");
     gtk_box_pack_start(GTK_BOX(box), widgets->excludeEntry, FALSE, FALSE, 4);
 
     GtkWidget* hint = gtk_label_new(
-        "Değişiklikler yaklaşık 1 saniye içinde otomatik uygulanır.");
+        "Changes apply automatically within about a second.");
     gtk_widget_set_halign(hint, GTK_ALIGN_START);
     gtk_label_set_line_wrap(GTK_LABEL(hint), TRUE);
     gtk_style_context_add_class(gtk_widget_get_style_context(hint), "hint");
@@ -295,6 +373,8 @@ int main(int argc, char** argv) {
                       G_CALLBACK(OnStyleChanged), widgets);
     g_signal_connect(widgets->invertCheck, "toggled",
                       G_CALLBACK(OnInvertToggled), widgets);
+    g_signal_connect(widgets->startupCheck, "toggled",
+                      G_CALLBACK(OnStartupToggled), widgets);
     g_signal_connect(widgets->customPathChooser, "file-set",
                       G_CALLBACK(OnCustomPathChanged), widgets);
     g_signal_connect(widgets->excludeEntry, "changed",
